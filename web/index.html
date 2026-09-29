@@ -172,8 +172,10 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
       <label for="f_material">Material</label><input id="f_material" placeholder="PETG">
       <label for="f_colorName">Color name</label><input id="f_colorName" placeholder="Black">
       <label for="f_colorHex">Color</label>
-      <div class="row"><input id="f_colorPick" type="color"><input id="f_colorHex" placeholder="RRGGBB" maxlength="7"></div>
+      <div class="row"><span id="f_preview" class="sw big" title="How this spool will look"></span><input id="f_colorPick" type="color"><input id="f_colorHex" placeholder="RRGGBB" maxlength="7"></div>
       <span class="hint" id="f_colorHint" hidden>Guessed from the color name. It's replaced by the real color once this spool is linked to your print history.</span>
+      <label for="f_colorStyle">Color style</label>
+      <select id="f_colorStyle"><option value="">Auto (rainbow if the name says so)</option><option value="solid">Solid</option><option value="rainbow">Rainbow</option></select>
       <label for="f_price">Price paid $</label><input id="f_price" type="number" min="0" step="0.01" placeholder="18.99">
       <label for="f_start">Starting net g</label><input id="f_start" type="number" min="0" step="1">
       <span class="hint">Filament on the spool when new (usually 1000).</span>
@@ -240,7 +242,23 @@ const keyOf = (type, color) => `${String(type || '').toUpperCase()}|${hex6(color
 const fmtG = g => `${Math.round(g).toLocaleString()} g`;
 const fmtDate = s => s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 const uid = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const swatch = (hex, cls = '') => `<span class="sw ${cls}" style="background:#${hex6(hex) || 'cccccc'}"></span>`;
+// Rainbow/multicolor spools get a gradient swatch; pastel/neon/dark rainbows shift the bands.
+const RAINBOW = ['FF3B30', 'FF9500', 'FFCC00', '34C759', '007AFF', 'AF52DE'];
+function isRainbow(s) {
+  if (!s) return false;
+  if (s.colorStyle === 'rainbow') return true;
+  return s.colorStyle !== 'solid' && /rainbow|multi-?colou?r/i.test(s.colorName || '');
+}
+function rainbowStops(name) {
+  const n = String(name || '').toLowerCase();
+  const mod = /pastel|clay|macaron|candy/.test(n) ? 'pastel' : /neon|fluorescent/.test(n) ? 'neon' : /\bdark\b|deep/.test(n) ? 'dark' : '';
+  return RAINBOW.map(h => mod ? shadeHex(h, mod) : h);
+}
+function swatchBg(hex, spool) {
+  if (isRainbow(spool)) { const st = rainbowStops(spool.colorName); return `conic-gradient(${[...st, st[0]].map(h => '#' + h).join(',')})`; }
+  return '#' + (hex6(hex) || 'cccccc');
+}
+const swatch = (hex, cls = '', spool = null) => `<span class="sw ${cls}" style="background:${swatchBg(hex, spool)}"></span>`;
 const spoolName = s => [s.brand, s.material, s.colorName].filter(Boolean).join(' ') || 'Unnamed spool';
 // Share of a failed/cancelled print that ran: time until it stopped / the slicer's time estimate.
 function ranFraction(p) {
@@ -472,7 +490,7 @@ function renderSlots() {
     const low = rem < lowGrams();
     h += `<div class="slot ${low ? 'low' : ''}">
       <span class="label">Slot ${n}${low ? ' · <span class="badge low">Low</span>' : ''}</span>
-      <div class="top">${swatch(s.colorHex, 'big')}<div><div class="name">${esc(spoolName(s))}</div>
+      <div class="top">${swatch(s.colorHex, 'big', s)}<div><div class="name">${esc(spoolName(s))}</div>
         <div class="grams">${fmtG(rem)} <span class="muted" style="font-size:13px;font-weight:400">left</span></div></div></div>
       <div class="bar"><div style="width:${pct.toFixed(1)}%"></div></div>
       <div class="muted" style="font-size:12px">${seen}</div>
@@ -527,7 +545,7 @@ function renderSpools() {
   $('spools').innerHTML = `<tr><th></th><th>Spool</th><th>Slot</th><th class="num">Paid</th><th class="num">Start</th><th class="num">Used</th><th class="num">Remaining</th><th class="num">Prints</th><th>Last used</th><th></th></tr>` +
     list.map(s => {
       const st = calc.stats.get(s.id); const rem = remainingOf(s); const low = s.status !== 'empty' && rem < lowGrams();
-      return `<tr class="${s.status === 'empty' ? 'dim' : ''}"><td>${swatch(s.colorHex)}</td>
+      return `<tr class="${s.status === 'empty' ? 'dim' : ''}"><td>${swatch(s.colorHex, '', s)}</td>
         <td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Open product page">${esc(spoolName(s))} ↗</a>` : esc(spoolName(s))}${s.status === 'empty' ? ' <span class="muted">(used up)</span>' : ''}</td>
         <td>${calc.spoolSlot.get(s.id) || ''}</td>
         <td class="num">${costPerGram(s) != null ? `<span title="${fmt$(costPerGram(s) * 1000)}/kg">${fmt$(+s.price)}</span>` : '<span class="muted">—</span>'}</td>
@@ -546,7 +564,7 @@ function chips(p) {
     const cls = r.state === 'ignored' ? 'ignored' : r.spool ? '' : 'unmatched';
     const color = r.spool ? r.spool.colorHex : u.color;
     const edited = u.gramsOverride != null && u.gramsOverride !== '' ? '*' : '';
-    return `<span class="chip ${cls}" data-act="editUsage" data-pid="${esc(p.id)}" data-ui="${i}" title="${esc((u.type || '') + ' ' + (u.color ? '#' + hex6(u.color) : '') + (u.slot ? ' · slot ' + u.slot : ''))}">${swatch(color)}${g.toFixed(g < 10 ? 1 : 0)} g${edited} · ${esc(label)}</span>`;
+    return `<span class="chip ${cls}" data-act="editUsage" data-pid="${esc(p.id)}" data-ui="${i}" title="${esc((u.type || '') + ' ' + (u.color ? '#' + hex6(u.color) : '') + (u.slot ? ' · slot ' + u.slot : ''))}">${swatch(color, '', r.spool)}${g.toFixed(g < 10 ? 1 : 0)} g${edited} · ${esc(label)}</span>`;
   }).join('') || '<span class="muted">no filament data</span>';
 }
 
@@ -603,6 +621,7 @@ function openSpool(spool, isNew) {
   $('f_colorName').value = spool.colorName || '';
   $('f_colorHex').value = hex6(spool.colorHex);
   $('f_colorPick').value = '#' + (hex6(spool.colorHex).length === 6 ? hex6(spool.colorHex) : 'CCCCCC');
+  $('f_colorStyle').value = spool.colorStyle || '';
   $('f_colorHex').dataset.guessed = spool.colorGuessed ? '1' : '';
   $('f_colorHint').hidden = !spool.colorGuessed;
   $('f_start').value = spool.startGrams ?? 1000;
@@ -632,6 +651,7 @@ function openSpool(spool, isNew) {
   $('f_remaining').dataset.orig = Math.round(rem);
   $('f_remainingHint').textContent = hint + ' If you weighed it, enter the filament only (scale reading minus the empty spool); later prints are subtracted from that.';
   $('spoolDelete').hidden = isNew;
+  updatePreview();
   $('spoolDlg').showModal();
 }
 
@@ -654,6 +674,10 @@ function applyScaleReading() {
   if (reading !== '' && tare !== '') $('f_remaining').value = Math.round(+reading - +tare);
 }
 
+function updatePreview() {
+  $('f_preview').style.background = swatchBg($('f_colorHex').value, { colorName: $('f_colorName').value, colorStyle: $('f_colorStyle').value });
+}
+
 // Grams a not-yet-saved spool would pick up from history.
 function previewUsed(spool) {
   const tmp = { ...spool, id: '__preview' };
@@ -672,6 +696,7 @@ function saveSpool() {
   s.colorName = $('f_colorName').value.trim();
   s.colorHex = hex6($('f_colorHex').value);
   s.colorGuessed = !!$('f_colorHex').dataset.guessed;
+  s.colorStyle = $('f_colorStyle').value || null;
   s.startGrams = +$('f_start').value || 0;
   s.price = $('f_price').value === '' ? null : +$('f_price').value;
   s.tareGrams = $('f_tare').value === '' ? null : +$('f_tare').value;
@@ -826,6 +851,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'f_colorPick' || e.target.id === 'f_colorHex') { $('f_colorHex').dataset.guessed = ''; $('f_colorHint').hidden = true; }
   if (e.target.id === 'f_colorPick') $('f_colorHex').value = e.target.value.slice(1).toUpperCase();
   if (e.target.id === 'f_colorHex' && hex6(e.target.value).length === 6) $('f_colorPick').value = '#' + hex6(e.target.value);
+  if (e.target.closest('#spoolDlg')) updatePreview();
 });
 
 // Keeps the local server alive while the page is open; it exits a while after the tab closes.
