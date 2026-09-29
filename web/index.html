@@ -254,9 +254,13 @@ function rainbowStops(name) {
   const mod = /pastel|clay|macaron|candy/.test(n) ? 'pastel' : /neon|fluorescent/.test(n) ? 'neon' : /\bdark\b|deep/.test(n) ? 'dark' : '';
   return RAINBOW.map(h => mod ? shadeHex(h, mod) : h);
 }
+// Silk/metallic finishes get a glossy highlight on top of the color.
+const hasSheen = s => !!s && /silk|metallic|shiny|glossy|satin|chrome/i.test(`${s.colorName || ''} ${s.material || ''}`);
 function swatchBg(hex, spool) {
-  if (isRainbow(spool)) { const st = rainbowStops(spool.colorName); return `conic-gradient(${[...st, st[0]].map(h => '#' + h).join(',')})`; }
-  return '#' + (hex6(hex) || 'cccccc');
+  let base = '#' + (hex6(hex) || 'cccccc');
+  if (isRainbow(spool)) { const st = rainbowStops(spool.colorName); base = `conic-gradient(${[...st, st[0]].map(h => '#' + h).join(',')})`; }
+  if (hasSheen(spool)) return `radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), rgba(255,255,255,.25) 28%, rgba(255,255,255,0) 55%), ${base}`;
+  return base;
 }
 const swatch = (hex, cls = '', spool = null) => `<span class="sw ${cls}" style="background:${swatchBg(hex, spool)}"></span>`;
 const spoolName = s => [s.brand, s.material, s.colorName].filter(Boolean).join(' ') || 'Unnamed spool';
@@ -675,7 +679,8 @@ function applyScaleReading() {
 }
 
 function updatePreview() {
-  $('f_preview').style.background = swatchBg($('f_colorHex').value, { colorName: $('f_colorName').value, colorStyle: $('f_colorStyle').value });
+  $('f_preview').style.background = swatchBg($('f_colorHex').value,
+    { colorName: $('f_colorName').value, material: $('f_material').value, colorStyle: $('f_colorStyle').value });
 }
 
 // Grams a not-yet-saved spool would pick up from history.
