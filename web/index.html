@@ -866,23 +866,74 @@ function sendToSpooldex() {
   window.open(ORIGIN + '/#add=' + encodeURIComponent(JSON.stringify(data)), '_blank');
 }
 
-// Best-effort swatch from a color name using the browser's named colors: the whole name first
-// ("Forest Green" -> forestgreen), then single words from the end ("Neon Green" -> green).
-function guessHex(name) {
-  const words = String(name || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
-  const tries = [words.join(''), ...words.slice().reverse()];
+// Color names common on filament that browsers don't know (or know as something duller).
+const FILAMENT_COLORS = {
+  'neon green': 'CCFF00', 'neon yellow': 'E6FF00', 'neon orange': 'FF6A13', 'neon pink': 'FF3EA5',
+  'neon blue': '1F51FF', 'neon red': 'FF1744', 'neon purple': 'B026FF',
+  'fluorescent green': 'CCFF00', 'fluorescent yellow': 'E6FF00', 'fluorescent orange': 'FF6A13', 'fluorescent pink': 'FF3EA5',
+  'charcoal': '36454F', 'jet black': '0A0A0A', 'galaxy black': '1C1C24', 'space gray': '5B5F66', 'titan gray': '5E6064', 'ash gray': '9B9EA0',
+  'bone white': 'E3DAC9', 'jade white': 'F3F4EE', 'cool white': 'F4F6F8', 'warm white': 'F6F0E1', 'cold white': 'F4F6F8', 'marble': 'E8E6E1',
+  'bambu green': '00AE42', 'mistletoe green': '3F8E43', 'army green': '4B5320', 'military green': '5B6D38', 'grass green': '4CA835',
+  'mint': '98E8C1', 'mint green': '98E8C1', 'jade': '00A86B', 'emerald': '50C878', 'sage': '9CAF88', 'kelly green': '4CBB17',
+  'sky blue': '87CEEB', 'baby blue': '9CC9F2', 'ice blue': 'A5D8F3', 'cobalt blue': '0047AB', 'ocean blue': '1C6EA4', 'cyan': '00B7EB',
+  'sakura pink': 'F5B7C8', 'hot pink': 'FF4FA0', 'bubblegum pink': 'FFA3C8', 'blush': 'DE9FA4', 'rose gold': 'B76E79',
+  'lilac': 'C8A2C8', 'lilac purple': 'AE96D4', 'grape': '6F2DA8', 'royal purple': '7851A9',
+  'sunflower yellow': 'FEC600', 'lemon yellow': 'FFF44F', 'mustard': 'E1AD01', 'pumpkin orange': 'FF7518', 'burnt orange': 'CC5500',
+  'scarlet': 'E0291E', 'scarlet red': 'E0291E', 'cherry red': 'C21E2A', 'true red': 'D32029', 'burgundy': '800020', 'terracotta': 'C8674E',
+  'desert tan': 'D8BF9C', 'latte brown': 'B38B6D', 'caramel': 'C47E2C', 'chocolate': '5C3A21', 'dark chocolate': '3F2A1E', 'wood': 'A67B5B',
+  'gold': 'D4AF37', 'silver': 'B8BCC2', 'copper': 'B87333', 'bronze': 'A97142',
+};
+// Finish/product words that say nothing about the hue.
+const FINISH_WORDS = new Set(['matte', 'silk', 'glossy', 'gloss', 'satin', 'basic', 'pro', 'plus', 'tough', 'high', 'speed', 'hs',
+  'translucent', 'transparent', 'clear', 'metallic', 'sparkle', 'glitter', 'glow', 'in', 'the', 'dark', 'pla', 'petg', 'abs', 'asa', 'tpu']);
+
+function cssColorHex(name) {
   const probe = document.createElement('span');
   document.body.appendChild(probe);
   try {
-    for (const t of tries) {
-      probe.style.color = '';
-      probe.style.color = t;
-      if (!t || !probe.style.color) continue;
-      const rgb = getComputedStyle(probe).color.match(/\d+/g);
-      if (rgb) return rgb.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
-    }
-    return '';
+    probe.style.color = name;
+    if (!name || !probe.style.color) return '';
+    const rgb = getComputedStyle(probe).color.match(/\d+/g);
+    return rgb ? rgb.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase() : '';
   } finally { probe.remove(); }
+}
+
+// Adjusts a hex color for words like neon / pastel / light / dark.
+function shadeHex(hex, mod) {
+  let [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (d) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  if (mod === 'neon') { s = 1; l = 0.55; }
+  if (mod === 'light' || mod === 'pastel' || mod === 'baby') { l = Math.max(l, 0.8); if (mod === 'pastel') s = Math.min(s, 0.6); }
+  if (mod === 'dark' || mod === 'deep') { l = Math.min(l, 0.25); }
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [r, g, b].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+// Best-effort swatch from a filament color name, e.g. "Matte Neon Green" -> CCFF00. Tries the filament
+// color list, then browser color names, then a base color adjusted by neon/light/pastel/dark.
+function guessHex(name) {
+  const all = String(name || '').toLowerCase().replace(/glow[\s-]*in[\s-]*the[\s-]*dark/g, ' ')
+    .replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+  const words = all.filter(w => !FINISH_WORDS.has(w) || w === 'dark');
+  const phrase = words.join(' ');
+  if (FILAMENT_COLORS[phrase]) return FILAMENT_COLORS[phrase];
+  const css = cssColorHex(words.join(''));
+  if (css) return css;
+  const mods = ['neon', 'fluorescent', 'light', 'pastel', 'baby', 'dark', 'deep'];
+  const mod = words.find(w => mods.includes(w));
+  const base = words.filter(w => !mods.includes(w));
+  for (let i = base.length - 1; i >= 0; i--) {
+    const hex = FILAMENT_COLORS[base.slice(i).join(' ')] || FILAMENT_COLORS[base[i]] || cssColorHex(base[i]);
+    if (hex) return mod ? shadeHex(hex, mod === 'fluorescent' ? 'neon' : mod) : hex;
+  }
+  return '';
 }
 
 // Turns what the bookmark sent into a pre-filled new spool.
