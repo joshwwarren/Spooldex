@@ -8,13 +8,16 @@
     -SyncOnly      Pull new prints from Bambu Cloud into the inventory and exit (used at Windows logon).
     -Login         Sign in to Bambu Cloud and store the access token, encrypted to your Windows account.
     -TasksFile     Sync from a saved my/tasks JSON response instead of the cloud (testing).
+    -Demo          Open with made-up spools and prints (no Bambu account needed); uses port 8766 and a
+                   temporary folder, so your real data is untouched.
 #>
 [CmdletBinding()]
 param(
     [switch]$Login,
     [switch]$SyncOnly,
     [string]$TasksFile,
-    [int]$Port = 8765,
+    [switch]$Demo,
+    [int]$Port = $(if ($Demo) { 8766 } else { 8765 }),
     [int]$IdleMinutes = 15,
     [switch]$NoBrowser
 )
@@ -26,7 +29,7 @@ $Root      = $PSScriptRoot
 # Personal data (inventory, Bambu token, logs) lives outside the program folder so it never ends up in git.
 # Not under AppData: packaged (MSIX) apps get AppData writes silently redirected to a private copy, so
 # launching from such an app and from a desktop shortcut would see different data.
-$DataDir   = Join-Path $env:USERPROFILE 'Spooldex'
+$DataDir   = if ($Demo) { Join-Path $env:TEMP 'Spooldex-demo' } else { Join-Path $env:USERPROFILE 'Spooldex' }
 $DbPath    = Join-Path $DataDir 'tracker.json'
 $TokenPath = Join-Path $DataDir 'token.xml'
 $AuthPath  = Join-Path $DataDir 'auth.json'
@@ -38,9 +41,15 @@ $Utf8      = New-Object System.Text.UTF8Encoding $false
 
 # Older versions kept data in .\data next to the script; copy it over once (the old folder stays as a backup).
 $LegacyDir = Join-Path $Root 'data'
-if ((Test-Path (Join-Path $LegacyDir 'tracker.json')) -and -not (Test-Path $DataDir)) { Copy-Item -Recurse $LegacyDir $DataDir }
+if (-not $Demo -and (Test-Path (Join-Path $LegacyDir 'tracker.json')) -and -not (Test-Path $DataDir)) { Copy-Item -Recurse $LegacyDir $DataDir }
 
 New-Item -ItemType Directory -Force -Path $DataDir, $BackupDir | Out-Null
+
+if ($Demo) {
+    # Fresh made-up inventory every launch.
+    & (Join-Path $Root 'tools\New-DemoData.ps1') -Path $DbPath
+    Remove-Item $TokenPath, $AuthPath -ErrorAction SilentlyContinue
+}
 
 # ---------------------------------------------------------------- helpers
 
@@ -96,6 +105,7 @@ function Get-Token {
 }
 
 function Get-AuthInfo {
+    if ($Demo) { return [pscustomobject]@{ loggedIn = $true; expiresAt = (Get-Date).AddDays(80).ToString('o'); invalid = $false; demo = $true } }
     $info = [ordered]@{ loggedIn = (Test-Path $TokenPath); expiresAt = $null; invalid = $false }
     if (Test-Path $AuthPath) {
         $a = [IO.File]::ReadAllText($AuthPath, $Utf8) | ConvertFrom-Json
@@ -211,7 +221,9 @@ function Invoke-Sync {
     $db = Read-Db
     $result = [ordered]@{ at = (Get-Date).ToString('o'); ok = $false; fetched = 0; added = 0; message = '' }
     try {
-        if ($TasksFile) {
+        if ($Demo) {
+            $tasks = @()
+        } elseif ($TasksFile) {
             $raw   = [IO.File]::ReadAllText((Resolve-Path $TasksFile), $Utf8) | ConvertFrom-Json
             $tasks = @(Get-Prop $raw 'hits')
         } else {

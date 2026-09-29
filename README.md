@@ -12,6 +12,28 @@ printing from Bambu Studio working, since it never talks to the printer directly
 
 Spooldex is an independent project and is not affiliated with or endorsed by Bambu Lab.
 
+![Spooldex overview: AMS lite slots, items needing attention and the spool list](docs/screenshots/overview.png)
+
+<details>
+<summary>More screenshots</summary>
+
+**Print history with per-print cost**
+
+![Print history with grams, cost and the spool each print was charged to](docs/screenshots/history.png)
+
+**Adding a spool from a store page with the bookmark**
+
+![New spool dialog pre-filled from a product page](docs/screenshots/add-spool.png)
+
+**Dark theme**
+
+![Spooldex in dark theme](docs/screenshots/overview-dark.png)
+
+</details>
+
+Screenshots use the built-in demo data. To try it yourself without a Bambu account, run
+`powershell -ExecutionPolicy Bypass -File Spooldex.ps1 -Demo`.
+
 ## Setup
 
 1. Double-click **`Login.cmd`** and sign in with your Bambu account email. If you sign in to Bambu with
@@ -79,4 +101,8 @@ Spooldex.ps1              # serve the page on http://localhost:8765 and open it
 Spooldex.ps1 -SyncOnly    # pull new prints and exit
 Spooldex.ps1 -Login       # sign in to Bambu Cloud
 Spooldex.ps1 -TasksFile x # sync from a saved my/tasks JSON response (testing)
+Spooldex.ps1 -Demo        # made-up spools and prints on port 8766; your real data is untouched
 ```
+
+The page follows Windows' light/dark setting; the **Theme** button in the header switches between
+Auto, Light and Dark.

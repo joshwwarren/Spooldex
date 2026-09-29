@@ -4,24 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spooldex</title>
+<link rel="icon" href="/favicon.ico?v=2">
+<script>
+  // Apply the saved theme before first paint to avoid a flash. 'auto' follows Windows.
+  try { const t = localStorage.getItem('spooldex-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+</script>
 <style>
 :root {
   --bg: #f5f6f8; --panel: #ffffff; --text: #1c2024; --muted: #636b75; --border: #e0e3e8;
   --accent: #0b7a57; --accent-text: #ffffff; --bar: #e8ebef;
   --warn: #9a5200; --warn-bg: #fff3e0; --bad: #b3261e; --bad-bg: #fdecea; --ok: #0b7a57; --ok-bg: #e6f4ee;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #131518; --panel: #1c1f23; --text: #e5e7ea; --muted: #99a0aa; --border: #2e333a;
+  --accent: #3cc491; --accent-text: #07140e; --bar: #2a2e34;
+  --warn: #f2a54a; --warn-bg: #33260f; --bad: #ff7b72; --bad-bg: #3b1816; --ok: #3cc491; --ok-bg: #12291f;
+  color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #131518; --panel: #1c1f23; --text: #e5e7ea; --muted: #99a0aa; --border: #2e333a;
     --accent: #3cc491; --accent-text: #07140e; --bar: #2a2e34;
     --warn: #f2a54a; --warn-bg: #33260f; --bad: #ff7b72; --bad-bg: #3b1816; --ok: #3cc491; --ok-bg: #12291f;
+    color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
 main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
 header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
-header h1 { font-size: 20px; margin: 0; flex: 1 1 auto; }
+header h1 { font-size: 20px; margin: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; }
 .status { color: var(--muted); font-size: 13px; }
 .status.bad { color: var(--bad); }
 section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
@@ -91,14 +104,18 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
 .dlg-actions .grow { flex: 1; }
 #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
 #toast.show { opacity: 1; }
-@media (max-width: 560px) { .form { grid-template-columns: 1fr; } .form .hint { grid-column: 1; } }
+@media (max-width: 560px) {
+  .form { grid-template-columns: 1fr; } .form .hint { grid-column: 1; }
+  .slots { gap: 8px; } .slot { padding: 10px; } .slot .grams { font-size: 18px; } .slot .sw.big { width: 26px; height: 26px; }
+}
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Spooldex</h1>
+    <h1><img src="/favicon.ico?v=2" alt="" width="26" height="26"> Spooldex</h1>
     <span id="syncStatus" class="status"></span>
+    <button id="themeBtn" data-act="theme" title="Switch between automatic, light and dark">Theme: Auto</button>
     <button id="syncBtn" class="primary" data-act="sync">Sync prints</button>
   </header>
   <div id="banners"></div>
@@ -156,7 +173,7 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
       <label for="f_price">Price paid $</label><input id="f_price" type="number" min="0" step="0.01" placeholder="18.99">
       <label for="f_start">Starting net g</label><input id="f_start" type="number" min="0" step="1">
       <span class="hint">Filament on the spool when new (usually 1000).</span>
-      <label for="f_tare">Empty spool g</label><input id="f_tare" type="number" min="0" step="1" placeholder="140">
+      <label for="f_tare">Empty spool g</label><input id="f_tare" type="number" min="0" step="1" placeholder="Not weighed yet">
       <label for="f_scale">Scale reading g</label><input id="f_scale" type="number" min="0" step="1" placeholder="Spool + filament">
       <span class="hint">Optional. Once you know the empty spool's weight, weigh the whole spool and Remaining now fills in. You'll be asked to weigh the empty when a spool is used up; later spools with the same product link reuse it.</span>
       <label for="f_remaining">Remaining now g</label><input id="f_remaining" type="number" step="1">
@@ -167,7 +184,7 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
       <select id="f_status"><option value="active">In use / on shelf</option><option value="empty">Used up</option></select>
       <label for="f_link">Printed as</label><select id="f_link"></select>
       <span class="hint">If you've already printed with this spool, pick the filament from your history to link those prints.</span>
-      <label for="f_keys">Matches</label><input id="f_keys" placeholder="PETG|000000">
+      <label for="f_keys">Matches</label><input id="f_keys" placeholder="e.g. PLA|FF0000">
       <span class="hint">Material|color codes from print history that belong to this spool, comma separated.</span>
       <label for="f_url">Product link</label><input id="f_url" type="url" placeholder="https://www.microcenter.com/product/…">
       <label for="f_notes">Notes</label><input id="f_notes">
@@ -581,7 +598,7 @@ function openSpool(spool, isNew) {
   $('f_material').value = spool.material || '';
   $('f_colorName').value = spool.colorName || '';
   $('f_colorHex').value = hex6(spool.colorHex);
-  $('f_colorPick').value = '#' + (hex6(spool.colorHex).padEnd(6, '0'));
+  $('f_colorPick').value = '#' + (hex6(spool.colorHex).length === 6 ? hex6(spool.colorHex) : 'CCCCCC');
   $('f_start').value = spool.startGrams ?? 1000;
   $('f_price').value = spool.price ?? '';
   $('f_tare').value = spool.tareGrams ?? suggestedTare(spool.url) ?? '';
@@ -705,8 +722,19 @@ function saveUsage() {
 
 // ------------------------------------------------------------ events
 const printById = id => db.prints.find(p => p.id === id);
+const THEMES = ['auto', 'light', 'dark'];
+function currentTheme() { return document.documentElement.dataset.theme || 'auto'; }
+function showTheme() { $('themeBtn').textContent = 'Theme: ' + currentTheme()[0].toUpperCase() + currentTheme().slice(1); }
+function cycleTheme() {
+  const next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+  if (next === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('spooldex-theme', next); } catch {}
+  showTheme();
+}
+
 const actions = {
   sync,
+  theme: cycleTheme,
   newSpool: () => openSpool({ startGrams: 1000, matchKeys: [] }, true),
   editSpool: d => openSpool(spoolById(d.id), false),
   saveSpool,
@@ -846,6 +874,7 @@ const bm = $('bookmarklet');
 bm.href = 'javascript:' + encodeURIComponent('(' + sendToSpooldex.toString().replace('__ORIGIN__', location.origin) + ')()');
 bm.addEventListener('click', e => { e.preventDefault(); toast('Drag this button to your bookmarks bar, then click it on a product page.'); });
 window.addEventListener('hashchange', importFromHash);
+showTheme();
 
 load().then(() => { importFromHash(); if (db.auth?.loggedIn && !db.auth?.invalid) sync(); }).catch(() => {});
 </script>
