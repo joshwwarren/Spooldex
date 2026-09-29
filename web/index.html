@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spooldex</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --text: #1c2024; --muted: #636b75; --border: #e0e3e8;
+  --accent: #0b7a57; --accent-text: #ffffff; --bar: #e8ebef;
+  --warn: #9a5200; --warn-bg: #fff3e0; --bad: #b3261e; --bad-bg: #fdecea; --ok: #0b7a57; --ok-bg: #e6f4ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131518; --panel: #1c1f23; --text: #e5e7ea; --muted: #99a0aa; --border: #2e333a;
+    --accent: #3cc491; --accent-text: #07140e; --bar: #2a2e34;
+    --warn: #f2a54a; --warn-bg: #33260f; --bad: #ff7b72; --bad-bg: #3b1816; --ok: #3cc491; --ok-bg: #12291f;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
+header h1 { font-size: 20px; margin: 0; flex: 1 1 auto; }
+.status { color: var(--muted); font-size: 13px; }
+.status.bad { color: var(--bad); }
+section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+section h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+section h2 .grow { flex: 1; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.danger { color: var(--bad); }
+a { color: var(--accent); }
+button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
+button:disabled { opacity: .5; cursor: default; }
+select, input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+input[type=color] { padding: 0; width: 38px; height: 30px; }
+.muted { color: var(--muted); }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,.5); vertical-align: -2px; flex: none; }
+.sw.big { width: 34px; height: 34px; }
+
+.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 640px; }
+.slot select { width: 100%; }
+.slot { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.slot .top { display: flex; gap: 10px; align-items: center; }
+.slot .name { font-weight: 600; line-height: 1.25; }
+.slot .grams { font-size: 22px; font-weight: 650; }
+.slot.low { border-color: var(--warn); }
+.slot.empty { border-style: dashed; }
+.bar { height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); }
+.low .bar > div { background: var(--warn); }
+.label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.dim td { color: var(--muted); }
+.tablewrap { overflow-x: auto; }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px 2px 5px; margin: 2px 4px 2px 0; font-size: 12px; cursor: pointer; background: var(--panel); }
+.chip:hover { border-color: var(--muted); }
+.bookmarklet { display: inline-block; background: var(--accent); color: var(--accent-text); border-radius: 6px; padding: 2px 10px; text-decoration: none; font-weight: 600; cursor: grab; }
+.chip.unmatched { border-color: var(--bad); color: var(--bad); }
+.chip.ignored { text-decoration: line-through; color: var(--muted); }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px; }
+.badge.finished { background: var(--ok-bg); color: var(--ok); }
+.badge.failed, .badge.unknown { background: var(--bad-bg); color: var(--bad); }
+.badge.low { background: var(--warn-bg); color: var(--warn); }
+
+.item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.item:last-child { border-bottom: none; }
+.item .what { flex: 1 1 260px; }
+.item .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; background: var(--warn-bg); color: var(--warn); }
+.banner.bad { background: var(--bad-bg); color: var(--bad); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+
+dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); padding: 18px; width: min(460px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 14px; font-size: 16px; }
+.form { display: grid; grid-template-columns: 140px 1fr; gap: 9px 12px; align-items: center; }
+.form input:not([type=color]), .form select { width: 100%; }
+.form .hint { grid-column: 2; font-size: 12px; color: var(--muted); margin-top: -4px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.dlg-actions { display: flex; gap: 8px; margin-top: 18px; }
+.dlg-actions .grow { flex: 1; }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; }
+@media (max-width: 560px) { .form { grid-template-columns: 1fr; } .form .hint { grid-column: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Spooldex</h1>
+    <span id="syncStatus" class="status"></span>
+    <button id="syncBtn" class="primary" data-act="sync">Sync prints</button>
+  </header>
+  <div id="banners"></div>
+
+  <section>
+    <h2>AMS lite</h2>
+    <div id="slots" class="slots"></div>
+  </section>
+
+  <section id="attnSection" hidden>
+    <h2>Needs attention</h2>
+    <div id="attention"></div>
+  </section>
+
+  <section>
+    <h2><span class="grow">Spools</span>
+      <label class="muted" style="font-weight:400"><input type="checkbox" id="showEmpty" data-change="showEmpty"> show empty</label>
+      <button data-act="newSpool">Add spool</button></h2>
+    <div class="tablewrap"><table id="spools"></table></div>
+  </section>
+
+  <section>
+    <h2><span class="grow">Print history</span></h2>
+    <div class="toolbar">
+      <input id="printSearch" type="search" placeholder="Search prints" data-input="search" style="flex:1 1 200px">
+    </div>
+    <p id="costSummary" class="muted" style="margin:0 0 10px"></p>
+    <div class="tablewrap"><table id="prints"></table></div>
+    <div id="printsMore" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>Add spools from store pages</h2>
+    <p style="margin:0">Drag <a id="bookmarklet" class="bookmarklet" href="#">Send to Spooldex</a> to your browser's bookmarks bar.
+      On a filament product page, click it to start a new spool with the brand, material, color, weight, price and link filled in.
+      Keep Spooldex open (or open it from the desktop shortcut) first.</p>
+  </section>
+
+  <p class="muted" style="font-size:12px">
+    Grams come from Bambu Studio's slicing estimate for each print.
+    Warn when a spool drops below <input id="lowGrams" type="number" min="0" step="10" style="width:70px" data-change="lowGrams"> g.
+    Data is saved in <code>%USERPROFILE%\Spooldex</code>.
+  </p>
+</main>
+
+<dialog id="spoolDlg">
+  <form method="dialog" id="spoolForm">
+    <h3 id="spoolDlgTitle">Spool</h3>
+    <div class="form">
+      <label for="f_brand">Brand</label><input id="f_brand" placeholder="eSun">
+      <label for="f_material">Material</label><input id="f_material" placeholder="PETG">
+      <label for="f_colorName">Color name</label><input id="f_colorName" placeholder="Black">
+      <label for="f_colorHex">Color</label>
+      <div class="row"><input id="f_colorPick" type="color"><input id="f_colorHex" placeholder="RRGGBB" maxlength="7"></div>
+      <label for="f_price">Price paid $</label><input id="f_price" type="number" min="0" step="0.01" placeholder="18.99">
+      <label for="f_start">Starting net g</label><input id="f_start" type="number" min="0" step="1">
+      <span class="hint">Filament on the spool when new (usually 1000).</span>
+      <label for="f_tare">Empty spool g</label><input id="f_tare" type="number" min="0" step="1" placeholder="140">
+      <label for="f_scale">Scale reading g</label><input id="f_scale" type="number" min="0" step="1" placeholder="Spool + filament">
+      <span class="hint">Optional. Once you know the empty spool's weight, weigh the whole spool and Remaining now fills in. You'll be asked to weigh the empty when a spool is used up; later spools with the same product link reuse it.</span>
+      <label for="f_remaining">Remaining now g</label><input id="f_remaining" type="number" step="1">
+      <span class="hint" id="f_remainingHint"></span>
+      <label for="f_added">Opened on</label><input id="f_added" type="date">
+      <span class="hint">Prints before this date aren't charged to it. Leave blank for older spools.</span>
+      <label for="f_status">Status</label>
+      <select id="f_status"><option value="active">In use / on shelf</option><option value="empty">Used up</option></select>
+      <label for="f_link">Printed as</label><select id="f_link"></select>
+      <span class="hint">If you've already printed with this spool, pick the filament from your history to link those prints.</span>
+      <label for="f_keys">Matches</label><input id="f_keys" placeholder="PETG|000000">
+      <span class="hint">Material|color codes from print history that belong to this spool, comma separated.</span>
+      <label for="f_url">Product link</label><input id="f_url" type="url" placeholder="https://www.microcenter.com/product/…">
+      <label for="f_notes">Notes</label><input id="f_notes">
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="danger" id="spoolDelete" data-act="deleteSpool">Delete</button>
+      <span class="grow"></span>
+      <button type="button" data-act="closeDlg">Cancel</button>
+      <button type="button" class="primary" data-act="saveSpool">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="usageDlg">
+  <form method="dialog">
+    <h3>Filament used</h3>
+    <p id="usageInfo" class="muted" style="margin-top:0"></p>
+    <div class="form">
+      <label for="u_spool">Charge to</label><select id="u_spool"></select>
+      <label for="u_grams">Grams</label><input id="u_grams" type="number" min="0" step="0.1">
+      <span class="hint" id="u_gramsHint"></span>
+    </div>
+    <div class="dlg-actions">
+      <span class="grow"></span>
+      <button type="button" data-act="closeDlg">Cancel</button>
+      <button type="button" class="primary" data-act="saveUsage">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+const HDR = { 'Content-Type': 'application/json', 'X-Spooldex': '1' };
+let db = null;
+let calc = null;
+let offline = false;
+let showAllPrints = false;
+let search = '';
+let editing = null;   // spool id being edited, or 'new'
+let editingUsage = null;
+let editingExtras = null;   // product fields carried into a new spool (image, sku, upc)
+
+// ------------------------------------------------------------ utilities
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const hex6 = c => String(c || '').replace(/[^0-9a-f]/gi, '').slice(0, 6).toUpperCase();
+const keyOf = (type, color) => `${String(type || '').toUpperCase()}|${hex6(color)}`;
+const fmtG = g => `${Math.round(g).toLocaleString()} g`;
+const fmtDate = s => s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const uid = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const swatch = (hex, cls = '') => `<span class="sw ${cls}" style="background:#${hex6(hex) || 'cccccc'}"></span>`;
+const spoolName = s => [s.brand, s.material, s.colorName].filter(Boolean).join(' ') || 'Unnamed spool';
+// Share of a failed/cancelled print that ran: time until it stopped / the slicer's time estimate.
+function ranFraction(p) {
+  if (!p || p.status === 'finished') return 1;
+  const secs = (Date.parse(p.end) - Date.parse(p.start)) / 1000;
+  if (!(secs >= 0) || !(+p.estSeconds > 0)) return 1;
+  return Math.min(1, secs / +p.estSeconds);
+}
+const hasOverride = u => u.gramsOverride != null && u.gramsOverride !== '';
+const defaultGrams = (u, p) => (+u.grams || 0) * ranFraction(p);
+const gramsOf = (u, p) => hasOverride(u) ? +u.gramsOverride : defaultGrams(u, p);
+
+// Cost = grams x (price paid / starting net grams) of the spool each filament was charged to.
+const costPerGram = s => (s && +s.price > 0 && +s.startGrams > 0) ? +s.price / +s.startGrams : null;
+const fmt$ = v => v.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+function printCost(p) {
+  let total = 0, priced = false, partial = false;
+  p.usages.forEach((u, i) => {
+    const r = p._res[i];
+    if (r.state === 'ignored') return;
+    const c = costPerGram(r.spool);
+    if (c == null) { if (gramsOf(u, p) > 0) partial = true; return; }
+    total += c * gramsOf(u, p); priced = true;
+  });
+  return priced ? { total, partial } : null;
+}
+const spoolById = id => db.spools.find(s => s.id === id);
+const lowGrams = () => +(db.settings?.lowGrams ?? 150);
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : { method: 'POST', headers: HDR, body: JSON.stringify(body, (k, v) => k.startsWith('_') ? undefined : v) };
+  let r;
+  try { r = await fetch(path, opts); }
+  catch (e) { offline = true; renderBanners(); throw e; }
+  offline = false;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || r.statusText); e.status = r.status; throw e; }
+  return j;
+}
+
+function normalize(d) {
+  d.spools = Array.isArray(d.spools) ? d.spools : [];
+  d.prints = Array.isArray(d.prints) ? d.prints : [];
+  d.settings = d.settings || { lowGrams: 150 };
+  d.slotOverrides = d.slotOverrides && typeof d.slotOverrides === 'object' ? d.slotOverrides : {};
+  for (const p of d.prints) p.usages = Array.isArray(p.usages) ? p.usages : [];
+  for (const s of d.spools) s.matchKeys = Array.isArray(s.matchKeys) ? s.matchKeys : [];
+  return d;
+}
+
+async function load() { db = normalize(await api('/api/state')); render(); }
+
+async function save() {
+  try { db = normalize(await api('/api/save', db)); render(); }
+  catch (e) {
+    if (e.status === 409) { toast('New prints arrived while you were editing. Reloaded; please redo that change.'); await load(); }
+    else toast('Could not save: ' + e.message);
+  }
+}
+
+async function sync() {
+  const btn = $('syncBtn'); btn.disabled = true; btn.textContent = 'Syncing…';
+  try { db = normalize(await api('/api/sync', {})); render(); toast(db.lastSyncResult?.message || 'Synced'); }
+  catch (e) { toast('Sync failed: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Sync prints'; }
+}
+
+// ------------------------------------------------------------ matching and totals
+function inRange(spool, when) {
+  if (!when) return true;
+  const t = new Date(when);
+  if (spool.addedDate && t < new Date(spool.addedDate + 'T00:00:00')) return false;
+  if (spool.emptiedDate && t > new Date(spool.emptiedDate + 'T23:59:59')) return false;
+  return true;
+}
+
+// Which spool a usage is charged to: a manual choice wins, else the one spool whose
+// match keys and date range fit (slot breaks a tie).
+function resolve(print, u) {
+  if (u.spoolId === 'none') return { state: 'ignored' };
+  if (u.spoolId) { const s = spoolById(u.spoolId); return s ? { state: 'manual', spool: s } : { state: 'unmatched' }; }
+  if (!u.type && !u.color) return { state: 'unmatched' };
+  const k = keyOf(u.type, u.color);
+  const c = db.spools.filter(s => s.matchKeys.includes(k) && inRange(s, print.start || print.end));
+  if (c.length === 1) return { state: 'auto', spool: c[0] };
+  if (c.length > 1) return { state: 'ambiguous', candidates: c };
+  return { state: 'unmatched' };
+}
+
+function compute() {
+  const stats = new Map(db.spools.map(s => [s.id, { used: 0, usedSinceWeighed: 0, prints: 0, last: null }]));
+  const unknown = new Map();
+  const attention = [];
+  for (const p of db.prints) {
+    const issues = new Set();
+    p._res = p.usages.map(u => {
+      const r = resolve(p, u);
+      const g = gramsOf(u, p);
+      const when = p.end || p.start;
+      if (r.spool) {
+        const st = stats.get(r.spool.id);
+        st.used += g; st.prints++;
+        const w = r.spool.weighed;
+        if (w && (!when || when > w.at)) st.usedSinceWeighed += g;
+        if (when && (!st.last || when > st.last)) st.last = when;
+      } else if (r.state === 'unmatched' && (u.type || u.color)) {
+        const k = keyOf(u.type, u.color);
+        const e = unknown.get(k) || { key: k, type: u.type, color: hex6(u.color), grams: 0, count: 0, last: null, slots: new Set() };
+        e.grams += g; e.count++; if (u.slot) e.slots.add(u.slot);
+        if (when && (!e.last || when > e.last)) e.last = when;
+        unknown.set(k, e);
+      } else if (r.state === 'unmatched') issues.add('nofilament');
+      if (r.state === 'ambiguous') issues.add('ambiguous');
+      return r;
+    });
+    if (p.status !== 'finished' && !p.reviewed) issues.add('status');
+    p._issues = issues;
+    if (issues.size) attention.push(p);
+  }
+  return { stats, unknown: [...unknown.values()].sort((a, b) => b.grams - a.grams), attention, ...currentSlots() };
+}
+
+// What's in each AMS lite slot: whichever is newer of the last print through that slot or a
+// manual pick. A spool or filament only shows in the slot where it was seen most recently.
+function currentSlots() {
+  const latest = {};
+  for (const p of db.prints) {
+    const when = p.start || p.end;
+    if (!when) continue;
+    p.usages.forEach((u, i) => {
+      const r = p._res[i];
+      if (!u.slot || r.state === 'ignored') return;
+      if (!latest[u.slot] || when > latest[u.slot].when) {
+        latest[u.slot] = { when, spoolId: r.spool?.id || null, key: keyOf(u.type, u.color), type: u.type, color: hex6(u.color) };
+      }
+    });
+  }
+  for (const [n, o] of Object.entries(db.slotOverrides || {})) {
+    if (o && o.at && (!latest[n] || o.at > latest[n].when)) {
+      latest[n] = { when: o.at, spoolId: o.spoolId || null, key: null, manual: true };
+    }
+  }
+  const ident = e => e.spoolId || (e.key && 'k:' + e.key);
+  const newest = new Map();
+  for (const [n, e] of Object.entries(latest)) {
+    const id = ident(e);
+    if (id && (!newest.has(id) || e.when > latest[newest.get(id)].when)) newest.set(id, n);
+  }
+  const slots = {};
+  const spoolSlot = new Map();
+  for (const [n, e] of Object.entries(latest)) {
+    const id = ident(e);
+    const spool = e.spoolId ? spoolById(e.spoolId) : null;
+    if (!id || newest.get(id) !== n || (spool && spool.status === 'empty')) continue;
+    slots[n] = { ...e, spool };
+    if (spool) spoolSlot.set(spool.id, +n);
+  }
+  return { slots, spoolSlot };
+}
+
+const usedOf = s => calc.stats.get(s.id)?.used || 0;
+// A weighing is a checkpoint: remaining = weighed grams minus prints after it.
+const remainingOf = s => s.weighed
+  ? +s.weighed.grams - (calc.stats.get(s.id)?.usedSinceWeighed || 0)
+  : (+s.startGrams || 0) - usedOf(s) + (+s.adjustGrams || 0);
+
+// ------------------------------------------------------------ rendering
+function render() {
+  calc = compute();
+  $('lowGrams').value = lowGrams();
+  renderHeader(); renderBanners(); renderSlots(); renderAttention(); renderSpools(); renderPrints();
+}
+
+function renderHeader() {
+  const r = db.lastSyncResult;
+  const el = $('syncStatus');
+  if (!r) { el.textContent = 'Not synced yet'; el.className = 'status'; return; }
+  const when = new Date(r.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  el.textContent = r.ok ? `Last sync ${when}` : `Sync failed ${when}`;
+  el.className = 'status' + (r.ok ? '' : ' bad');
+  el.title = r.message || '';
+}
+
+function renderBanners() {
+  const b = [];
+  if (offline) b.push(`<div class="banner bad">Spooldex isn't running. Open it again from the desktop shortcut.</div>`);
+  if (db) {
+    const a = db.auth || {};
+    if (!a.loggedIn) b.push(`<div class="banner">Not signed in to Bambu Cloud. Double-click <b>Login.cmd</b> in the Spooldex folder, then press Sync.</div>`);
+    else if (a.invalid) b.push(`<div class="banner bad">Your Bambu login has expired. Double-click <b>Login.cmd</b> to sign in again, then press Sync.</div>`);
+    else if (a.expiresAt) {
+      const days = Math.floor((new Date(a.expiresAt) - Date.now()) / 864e5);
+      if (days < 10) b.push(`<div class="banner">Your Bambu login expires in ${Math.max(days, 0)} days. Run <b>Login.cmd</b> to renew it.</div>`);
+    }
+    if (db.lastSyncResult && !db.lastSyncResult.ok && a.loggedIn && !a.invalid) b.push(`<div class="banner bad">Last sync failed: ${esc(db.lastSyncResult.message)}</div>`);
+  }
+  $('banners').innerHTML = b.join('');
+}
+
+function spoolOptions(selectedId, extra = '') {
+  return extra + db.spools.filter(s => s.status !== 'empty' || s.id === selectedId)
+    .sort((a, b) => spoolName(a).localeCompare(spoolName(b)))
+    .map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${esc(spoolName(s))}${calc.spoolSlot.has(s.id) ? ` (slot ${calc.spoolSlot.get(s.id)})` : ''}</option>`).join('');
+}
+
+function renderSlots() {
+  let h = '';
+  for (const n of [1, 4, 2, 3]) {   // AMS lite layout: 1 4 / 2 3
+    const e = calc.slots[n];
+    const s = e?.spool;
+    const select = `<select data-change="slot" data-slot="${n}" aria-label="Change spool in slot ${n}">
+      <option value="">${s ? 'Change spool…' : 'Choose a spool…'}</option>${spoolOptions(null)}<option value="__empty">Mark slot empty</option></select>`;
+    const seen = e ? (e.manual ? `set ${fmtDate(e.when)}` : `last printed ${fmtDate(e.when)}`) : '';
+    if (!s && e?.key) {
+      h += `<div class="slot empty"><span class="label">Slot ${n}</span>
+        <div class="top">${swatch(e.color, 'big')}<div><div class="name">${esc(e.type || 'Unknown')} #${esc(e.color)}</div>
+          <div class="muted">No spool yet · ${seen}</div></div></div>
+        <button class="primary" data-act="spoolFromKey" data-key="${esc(e.key)}">New spool</button>${select}</div>`;
+      continue;
+    }
+    if (!s) { h += `<div class="slot empty"><span class="label">Slot ${n}</span><span class="muted">Empty${seen ? ' · ' + seen : ''}</span>${select}</div>`; continue; }
+    const rem = remainingOf(s);
+    const pct = Math.max(0, Math.min(100, (rem / (+s.startGrams || 1000)) * 100));
+    const low = rem < lowGrams();
+    h += `<div class="slot ${low ? 'low' : ''}">
+      <span class="label">Slot ${n}${low ? ' · <span class="badge low">Low</span>' : ''}</span>
+      <div class="top">${swatch(s.colorHex, 'big')}<div><div class="name">${esc(spoolName(s))}</div>
+        <div class="grams">${fmtG(rem)} <span class="muted" style="font-size:13px;font-weight:400">left</span></div></div></div>
+      <div class="bar"><div style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="muted" style="font-size:12px">${seen}</div>
+      ${select}</div>`;
+  }
+  $('slots').innerHTML = h;
+}
+
+function renderAttention() {
+  const items = [];
+  for (const u of calc.unknown) {
+    items.push(`<div class="item">${swatch(u.color, 'big')}
+      <div class="what"><b>${esc(u.type || 'Unknown')} #${esc(u.color)}</b> found in print history with no spool
+        <div class="muted">${u.count} print${u.count === 1 ? '' : 's'} · ${fmtG(u.grams)} · last used ${fmtDate(u.last)}${u.slots.size ? ` · slot ${[...u.slots].join(', ')}` : ''}</div></div>
+      <div class="actions"><button class="primary" data-act="spoolFromKey" data-key="${esc(u.key)}">New spool</button>
+        <select data-change="addKey" data-key="${esc(u.key)}">${spoolOptions(null, '<option value="">Add to existing spool…</option>')}</select></div></div>`);
+  }
+  for (const p of calc.attention) {
+    const reasons = [];
+    if (p._issues.has('status')) {
+      const f = ranFraction(p);
+      const counted = p.usages.reduce((t, u) => t + gramsOf(u, p), 0);
+      reasons.push(`Print ${p.status === 'failed' ? 'failed or was cancelled' : 'ended with unknown status'}` +
+        (f < 1 ? ` about ${Math.round(f * 100)}% of the way through; counting an estimated ${fmtG(counted)} of ${fmtG(p.plannedGrams)} planned.`
+               : `; counting the full planned ${fmtG(counted)}.`));
+    }
+    if (p._issues.has('nofilament')) reasons.push('Bambu didn\'t say which filament this used. Click the grams to pick a spool.');
+    if (p._issues.has('ambiguous')) reasons.push('More than one spool matches this filament. Click the grams to pick one.');
+    const actions = p._issues.has('status')
+      ? `<button data-act="keepPlanned" data-pid="${esc(p.id)}">${ranFraction(p) < 1 ? 'Keep estimate' : 'Count planned'}</button>
+         ${ranFraction(p) < 1 ? `<button data-act="fullPlanned" data-pid="${esc(p.id)}">Count full planned</button>` : ''}
+         <button data-act="actualGrams" data-pid="${esc(p.id)}">Enter actual g</button>
+         <button data-act="dontCount" data-pid="${esc(p.id)}">Don't count</button>` : '';
+    items.push(`<div class="item"><div class="what"><b>${esc(p.title || 'Untitled print')}</b> <span class="muted">${fmtDate(p.start)}</span>
+      <div class="muted">${reasons.join(' ')}</div><div>${chips(p)}</div></div>
+      <div class="actions">${actions}</div></div>`);
+  }
+  $('attnSection').hidden = !items.length;
+  $('attention').innerHTML = items.join('');
+}
+
+function renderSpools() {
+  const showEmpty = $('showEmpty').checked;
+  const list = db.spools.filter(s => showEmpty || s.status !== 'empty')
+    .sort((a, b) => (a.status === 'empty') - (b.status === 'empty')
+      || String(calc.stats.get(b.id).last || '').localeCompare(String(calc.stats.get(a.id).last || ''))
+      || spoolName(a).localeCompare(spoolName(b)));
+  if (!db.spools.length) {
+    $('spools').innerHTML = `<tr><td class="muted">No spools yet. ${calc.unknown.length ? 'Create them from the filaments found in your print history above, or' : ''} use <b>Add spool</b>.</td></tr>`;
+    return;
+  }
+  $('spools').innerHTML = `<tr><th></th><th>Spool</th><th>Slot</th><th class="num">Paid</th><th class="num">Start</th><th class="num">Used</th><th class="num">Remaining</th><th class="num">Prints</th><th>Last used</th><th></th></tr>` +
+    list.map(s => {
+      const st = calc.stats.get(s.id); const rem = remainingOf(s); const low = s.status !== 'empty' && rem < lowGrams();
+      return `<tr class="${s.status === 'empty' ? 'dim' : ''}"><td>${swatch(s.colorHex)}</td>
+        <td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Open product page">${esc(spoolName(s))} ↗</a>` : esc(spoolName(s))}${s.status === 'empty' ? ' <span class="muted">(used up)</span>' : ''}</td>
+        <td>${calc.spoolSlot.get(s.id) || ''}</td>
+        <td class="num">${costPerGram(s) != null ? `<span title="${fmt$(costPerGram(s) * 1000)}/kg">${fmt$(+s.price)}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="num">${fmtG(+s.startGrams || 0)}</td><td class="num">${fmtG(st.used)}</td>
+        <td class="num">${low ? '<span class="badge low">Low</span> ' : ''}${fmtG(rem)}</td>
+        <td class="num">${st.prints}</td><td>${fmtDate(st.last)}</td>
+        <td><button data-act="editSpool" data-id="${s.id}">Edit</button></td></tr>`;
+    }).join('');
+}
+
+function chips(p) {
+  return p.usages.map((u, i) => {
+    const r = p._res[i];
+    const g = gramsOf(u, p);
+    const label = r.spool ? spoolName(r.spool) : r.state === 'ignored' ? 'not counted' : r.state === 'ambiguous' ? 'which spool?' : 'no spool';
+    const cls = r.state === 'ignored' ? 'ignored' : r.spool ? '' : 'unmatched';
+    const color = r.spool ? r.spool.colorHex : u.color;
+    const edited = u.gramsOverride != null && u.gramsOverride !== '' ? '*' : '';
+    return `<span class="chip ${cls}" data-act="editUsage" data-pid="${esc(p.id)}" data-ui="${i}" title="${esc((u.type || '') + ' ' + (u.color ? '#' + hex6(u.color) : '') + (u.slot ? ' · slot ' + u.slot : ''))}">${swatch(color)}${g.toFixed(g < 10 ? 1 : 0)} g${edited} · ${esc(label)}</span>`;
+  }).join('') || '<span class="muted">no filament data</span>';
+}
+
+function renderCostSummary() {
+  const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();
+  let all = 0, month = 0, top = null, partial = false;
+  for (const p of db.prints) {
+    const c = printCost(p);
+    if (!c) { if (p.usages.some(u => gramsOf(u, p) > 0)) partial = true; continue; }
+    if (c.partial) partial = true;
+    all += c.total;
+    if ((p.start || '') >= cutoff) month += c.total;
+    if (!top || c.total > top.cost) top = { p, cost: c.total };
+  }
+  const onHand = db.spools.filter(s => s.status !== 'empty' && costPerGram(s) != null)
+    .reduce((t, s) => t + Math.max(0, remainingOf(s)) * costPerGram(s), 0);
+  if (!all && !onHand) {
+    $('costSummary').innerHTML = 'Add the price you paid to each spool (Edit) to see what your prints cost.';
+    return;
+  }
+  $('costSummary').innerHTML = [
+    `<b>${fmt$(month)}</b> of filament in the last 30 days`,
+    `<b>${fmt$(all)}</b> all time`,
+    top ? `priciest: ${esc(top.p.title || 'Untitled print')} (${fmt$(top.cost)})` : '',
+    onHand ? `<b>${fmt$(onHand)}</b> of filament on hand` : '',
+  ].filter(Boolean).join(' · ') + (partial ? '<br>Some prints use spools with no price yet, so totals are low.' : '');
+}
+
+function renderPrints() {
+  const q = search.trim().toLowerCase();
+  const list = db.prints.filter(p => !q || (p.title || '').toLowerCase().includes(q))
+    .sort((a, b) => String(b.start || '').localeCompare(String(a.start || '')));
+  const shown = showAllPrints ? list : list.slice(0, 40);
+  $('prints').innerHTML = list.length
+    ? `<tr><th>Date</th><th>Print</th><th>Status</th><th class="num">Grams</th><th class="num">Cost</th><th>Filament</th></tr>` + shown.map(p => {
+        const total = p.usages.reduce((t, u, i) => t + (p._res[i].state === 'ignored' ? 0 : gramsOf(u, p)), 0);
+        const c = printCost(p);
+        const cost = c ? `<span title="${c.partial ? 'Some filament in this print has no spool price yet' : ''}">${c.partial ? '≥ ' : ''}${fmt$(c.total)}</span>` : '<span class="muted">—</span>';
+        return `<tr><td style="white-space:nowrap">${fmtDate(p.start)}</td><td>${esc(p.title || 'Untitled print')}</td>
+          <td><span class="badge ${esc(p.status)}">${esc(p.status)}</span></td><td class="num">${total.toFixed(1)}</td><td class="num">${cost}</td><td>${chips(p)}</td></tr>`;
+      }).join('')
+    : `<tr><td class="muted">${db.prints.length ? 'No prints match.' : 'No prints yet. Press Sync prints to pull your Bambu Cloud history.'}</td></tr>`;
+  renderCostSummary();
+  $('printsMore').innerHTML = list.length > 40
+    ? `<button class="link" data-act="togglePrints">${showAllPrints ? 'Show fewer' : `Show all ${list.length} prints`}</button>` : '';
+}
+
+// ------------------------------------------------------------ spool dialog
+function openSpool(spool, isNew) {
+  editing = isNew ? 'new' : spool.id;
+  $('spoolDlgTitle').textContent = isNew ? 'New spool' : 'Edit spool';
+  $('f_brand').value = spool.brand || '';
+  $('f_material').value = spool.material || '';
+  $('f_colorName').value = spool.colorName || '';
+  $('f_colorHex').value = hex6(spool.colorHex);
+  $('f_colorPick').value = '#' + (hex6(spool.colorHex).padEnd(6, '0'));
+  $('f_start').value = spool.startGrams ?? 1000;
+  $('f_price').value = spool.price ?? '';
+  $('f_tare').value = spool.tareGrams ?? suggestedTare(spool.url) ?? '';
+  $('f_scale').value = '';
+  $('f_url').value = spool.url || '';
+  $('f_added').value = spool.addedDate || '';
+  $('f_status').value = spool.status || 'active';
+  $('f_keys').value = (spool.matchKeys || []).join(', ');
+  editingExtras = isNew ? { image: spool.image || null, sku: spool.sku || null, upc: spool.upc || null } : null;
+  $('f_link').innerHTML = '<option value="">—</option>' + calc.unknown.map(u =>
+    `<option value="${esc(u.key)}">${esc(u.type || 'Unknown')} #${esc(u.color)} · ${u.count} print${u.count === 1 ? '' : 's'}, last ${fmtDate(u.last)}</option>`).join('');
+  $('f_notes').value = spool.notes || '';
+  let rem, hint;
+  if (isNew) {
+    const used = previewUsed(spool);
+    rem = (+(spool.startGrams ?? 1000)) - used;
+    hint = `${fmtG(used)} used by matching prints so far.`;
+  } else {
+    rem = remainingOf(spool);
+    hint = spool.weighed
+      ? `Weighed ${fmtG(spool.weighed.grams)} on ${fmtDate(spool.weighed.at)}; ${fmtG(calc.stats.get(spool.id).usedSinceWeighed)} printed since.`
+      : `${fmtG(usedOf(spool))} used by matching prints.`;
+  }
+  $('f_remaining').value = Math.round(rem);
+  $('f_remaining').dataset.orig = Math.round(rem);
+  $('f_remainingHint').textContent = hint + ' If you weighed it, enter the filament only (scale reading minus the empty spool); later prints are subtracted from that.';
+  $('spoolDelete').hidden = isNew;
+  $('spoolDlg').showModal();
+}
+
+// Measured empty-spool weight from an earlier spool of the same product (same product link).
+function suggestedTare(url) {
+  const u = safeUrl(url || '');
+  if (!u) return null;
+  const same = db.spools.filter(s => s.url === u && s.tareGrams != null);
+  return same.length ? same[same.length - 1].tareGrams : null;
+}
+
+// Only http(s) links are kept, so a pasted "javascript:" URL can't end up in the page.
+function safeUrl(v) {
+  try { const u = new URL(String(v).trim()); return /^https?:$/.test(u.protocol) ? u.href : null; }
+  catch { return null; }
+}
+
+function applyScaleReading() {
+  const reading = $('f_scale').value, tare = $('f_tare').value;
+  if (reading !== '' && tare !== '') $('f_remaining').value = Math.round(+reading - +tare);
+}
+
+// Grams a not-yet-saved spool would pick up from history.
+function previewUsed(spool) {
+  const tmp = { ...spool, id: '__preview' };
+  db.spools.push(tmp);
+  const c = compute();
+  db.spools.pop();
+  calc = compute();
+  return c.stats.get('__preview').used;
+}
+
+function saveSpool() {
+  const isNew = editing === 'new';
+  const s = isNew ? { id: uid(), adjustGrams: 0, ...editingExtras } : spoolById(editing);
+  s.brand = $('f_brand').value.trim();
+  s.material = $('f_material').value.trim();
+  s.colorName = $('f_colorName').value.trim();
+  s.colorHex = hex6($('f_colorHex').value);
+  s.startGrams = +$('f_start').value || 0;
+  s.price = $('f_price').value === '' ? null : +$('f_price').value;
+  s.tareGrams = $('f_tare').value === '' ? null : +$('f_tare').value;
+  s.url = safeUrl($('f_url').value);
+  s.addedDate = $('f_added').value || null;
+  const wasEmpty = s.status === 'empty';
+  s.status = $('f_status').value;
+  if (s.status === 'empty' && !wasEmpty) {
+    s.emptiedDate = new Date().toISOString().slice(0, 10);
+    if (s.tareGrams == null) {
+      const v = prompt('Used up. If you weigh the empty spool now, its weight is reused for future spools with the same product link. Grams (leave blank to skip):');
+      if (v && !isNaN(+v)) s.tareGrams = +v;
+    }
+  }
+  if (s.status !== 'empty') s.emptiedDate = null;
+  s.matchKeys = $('f_keys').value.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+  s.notes = $('f_notes').value.trim();
+  if (isNew) db.spools.push(s);
+
+  // A typed remaining amount becomes a weighed checkpoint as of now.
+  const remField = $('f_remaining');
+  if (remField.value !== remField.dataset.orig && remField.value !== '') {
+    s.weighed = { grams: +remField.value, at: new Date().toISOString() };
+    s.adjustGrams = 0;
+  }
+  $('spoolDlg').close();
+  save();
+}
+
+// ------------------------------------------------------------ usage dialog
+function openUsage(pid, ui) {
+  const p = db.prints.find(x => x.id === pid); const u = p.usages[ui];
+  editingUsage = { pid, ui };
+  $('usageInfo').textContent = `${p.title || 'Untitled print'} · ${fmtDate(p.start)} · ${u.type || 'unknown filament'}${u.color ? ' #' + hex6(u.color) : ''}${u.slot ? ' · slot ' + u.slot : ''}`;
+  const auto = resolve(p, { ...u, spoolId: undefined });
+  const autoLabel = auto.spool ? `Automatic (${spoolName(auto.spool)})` : 'Automatic (no match)';
+  $('u_spool').innerHTML = `<option value="">${esc(autoLabel)}</option><option value="none" ${u.spoolId === 'none' ? 'selected' : ''}>Don't count</option>` +
+    db.spools.map(s => `<option value="${s.id}" ${s.id === u.spoolId ? 'selected' : ''}>${esc(spoolName(s))}${s.status === 'empty' ? ' (used up)' : ''}</option>`).join('');
+  $('u_grams').value = Math.round(gramsOf(u, p) * 10) / 10;
+  $('u_gramsHint').textContent = ranFraction(p) < 1
+    ? `Planned ${(+u.grams || 0).toFixed(1)} g; the print stopped about ${Math.round(ranFraction(p) * 100)}% of the way through, so ${defaultGrams(u, p).toFixed(1)} g is estimated.`
+    : `Slicer estimate: ${(+u.grams || 0).toFixed(1)} g`;
+  $('usageDlg').showModal();
+}
+
+function saveUsage() {
+  const p = db.prints.find(x => x.id === editingUsage.pid); const u = p.usages[editingUsage.ui];
+  u.spoolId = $('u_spool').value || null;
+  const g = $('u_grams').value;
+  u.gramsOverride = (g === '' || Math.abs(+g - defaultGrams(u, p)) < 0.05) ? null : +g;
+  if (u.gramsOverride != null) p.reviewed = true;
+  $('usageDlg').close();
+  save();
+}
+
+// ------------------------------------------------------------ events
+const printById = id => db.prints.find(p => p.id === id);
+const actions = {
+  sync,
+  newSpool: () => openSpool({ startGrams: 1000, matchKeys: [] }, true),
+  editSpool: d => openSpool(spoolById(d.id), false),
+  saveSpool,
+  deleteSpool: () => {
+    const s = spoolById(editing);
+    if (!confirm(`Delete ${spoolName(s)}? Its prints will show as unassigned. To keep its history, set Status to "Used up" instead.`)) return;
+    db.spools = db.spools.filter(x => x !== s);
+    for (const p of db.prints) for (const u of p.usages) if (u.spoolId === s.id) u.spoolId = null;
+    $('spoolDlg').close(); save();
+  },
+  closeDlg: (d, el) => el.closest('dialog').close(),
+  spoolFromKey: d => {
+    const u = calc.unknown.find(x => x.key === d.key);
+    openSpool({ material: u.type || '', colorHex: u.color, startGrams: 1000, matchKeys: [u.key] }, true);
+  },
+  editUsage: d => openUsage(d.pid, +d.ui),
+  saveUsage,
+  keepPlanned: d => { printById(d.pid).reviewed = true; save(); },
+  fullPlanned: d => { const p = printById(d.pid); p.reviewed = true; for (const u of p.usages) u.gramsOverride = +u.grams || 0; save(); },
+  dontCount: d => { const p = printById(d.pid); p.reviewed = true; for (const u of p.usages) u.gramsOverride = 0; save(); },
+  actualGrams: d => {
+    const p = printById(d.pid);
+    const planned = p.usages.reduce((t, u) => t + (+u.grams || 0), 0);
+    const v = prompt(`Planned ${planned.toFixed(1)} g. How many grams did it actually use? (Weigh the failed print, or estimate.)`);
+    if (v === null || v.trim() === '' || isNaN(+v)) return;
+    const f = planned > 0 ? (+v) / planned : 0;
+    for (const u of p.usages) u.gramsOverride = Math.round((+u.grams || 0) * f * 10) / 10;
+    p.reviewed = true; save();
+  },
+  togglePrints: () => { showAllPrints = !showAllPrints; renderPrints(); },
+};
+const changes = {
+  slot: (d, el) => {
+    if (!el.value) return;
+    db.slotOverrides = db.slotOverrides || {};
+    db.slotOverrides[d.slot] = { spoolId: el.value === '__empty' ? null : el.value, at: new Date().toISOString() };
+    save();
+  },
+  addKey: (d, el) => {
+    if (!el.value) return;
+    const s = spoolById(el.value);
+    if (!s.matchKeys.includes(d.key)) s.matchKeys.push(d.key);
+    save();
+  },
+  showEmpty: () => renderSpools(),
+  lowGrams: (d, el) => { db.settings.lowGrams = Math.max(0, +el.value || 0); save(); },
+};
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (el && actions[el.dataset.act]) { e.preventDefault(); actions[el.dataset.act](el.dataset, el); }
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-change]');
+  if (el && changes[el.dataset.change]) changes[el.dataset.change](el.dataset, el);
+});
+document.addEventListener('input', e => {
+  if (e.target.dataset.input === 'search') { search = e.target.value; renderPrints(); }
+  if (e.target.id === 'f_scale' || e.target.id === 'f_tare') applyScaleReading();
+  if (e.target.id === 'f_link' && e.target.value) {
+    const key = e.target.value;
+    const keys = $('f_keys').value.split(',').map(k => k.trim()).filter(Boolean);
+    if (!keys.includes(key)) $('f_keys').value = [...keys, key].join(', ');
+    if (!$('f_colorHex').value) { $('f_colorHex').value = key.split('|')[1]; $('f_colorPick').value = '#' + key.split('|')[1]; }
+    if (!$('f_material').value) $('f_material').value = key.split('|')[0];
+    e.target.value = '';
+  }
+  if (e.target.id === 'f_url' && $('f_tare').value === '') $('f_tare').value = suggestedTare(e.target.value) ?? '';
+  if (e.target.id === 'f_colorPick') $('f_colorHex').value = e.target.value.slice(1).toUpperCase();
+  if (e.target.id === 'f_colorHex' && hex6(e.target.value).length === 6) $('f_colorPick').value = '#' + hex6(e.target.value);
+});
+
+// Keeps the local server alive while the page is open; it exits a while after the tab closes.
+setInterval(() => fetch('/api/ping').then(() => { if (offline) { offline = false; load(); } }).catch(() => { offline = true; renderBanners(); }), 60000);
+
+// ------------------------------------------------------------ "Send to Spooldex" bookmark
+// Runs on a store's product page in your own browser: reads the page's schema.org Product data and
+// opens this tracker with it. It must be self-contained because it's serialized into the bookmark.
+function sendToSpooldex() {
+  var ORIGIN = '__ORIGIN__';
+  var product = {};
+  document.querySelectorAll('script[type="application/ld+json"]').forEach(function (s) {
+    try {
+      (function walk(x) {
+        if (!x || typeof x !== 'object') return;
+        if (Array.isArray(x)) return x.forEach(walk);
+        var t = x['@type'];
+        if (!product.name && (t === 'Product' || (Array.isArray(t) && t.indexOf('Product') >= 0))) product = x;
+        if (x['@graph']) walk(x['@graph']);
+      })(JSON.parse(s.textContent));
+    } catch (e) {}
+  });
+  function meta(n) { var m = document.querySelector('meta[property="' + n + '"],meta[name="' + n + '"]'); return m ? m.content : ''; }
+  var offer = [].concat(product.offers || [])[0] || {};
+  var image = [].concat(product.image || meta('og:image'))[0] || '';
+  var brand = product.brand ? (product.brand.name || product.brand) : '';
+  var upcMatch = document.documentElement.innerHTML.match(/"(?:upc|gtin1[234]?)"\s*:\s*"(\d{12,14})"/i);
+  var data = {
+    title: product.name || meta('og:title') || document.title,
+    brand: typeof brand === 'string' ? brand : '',
+    price: offer.price || offer.lowPrice || '',
+    sku: product.sku || '',
+    upc: product.gtin12 || product.gtin13 || product.gtin || (upcMatch ? upcMatch[1] : ''),
+    image: typeof image === 'string' ? image : (image.url || ''),
+    url: offer.url || meta('og:url') || location.href.split('#')[0]
+  };
+  if (!product.name) alert('No product data found on this page, so only the title and link will be filled in.');
+  window.open(ORIGIN + '/#add=' + encodeURIComponent(JSON.stringify(data)), '_blank');
+}
+
+// Turns what the bookmark sent into a pre-filled new spool.
+function spoolFromProduct(d) {
+  const title = String(d.title || '').replace(/\s*[-|]\s*Micro Center\s*$/i, '');
+  const material = (title.match(/(PLA\+|PETG\+|PLA|PETG|PCTG|ABS|ASA|TPU|PC|Nylon)(?![A-Za-z])/i) || [])[1] || '';
+  const parts = title.split(' - ');
+  const colorName = parts.length > 1 ? parts.pop().split(/[;,]/)[0].trim() : '';
+  const kg = title.match(/(\d+(?:\.\d+)?)\s*kg/i), g = title.match(/(\d{3,4})\s*g\b/i);
+  return {
+    brand: String(d.brand || ''), material: material.toUpperCase(), colorName,
+    startGrams: kg ? Math.round(+kg[1] * 1000) : g ? +g[1] : 1000,
+    price: d.price !== '' && !isNaN(+d.price) ? +d.price : null,
+    url: safeUrl(d.url), image: safeUrl(d.image), sku: d.sku ? String(d.sku) : null, upc: d.upc ? String(d.upc) : null,
+    notes: [d.sku && 'SKU ' + d.sku, d.upc && 'UPC ' + d.upc].filter(Boolean).join(' · '),
+    matchKeys: [],
+  };
+}
+
+function importFromHash() {
+  if (!location.hash.startsWith('#add=')) return;
+  let data;
+  try { data = JSON.parse(decodeURIComponent(location.hash.slice(5))); } catch { data = null; }
+  history.replaceState(null, '', location.pathname);
+  if (data) openSpool(spoolFromProduct(data), true);
+}
+
+const bm = $('bookmarklet');
+bm.href = 'javascript:' + encodeURIComponent('(' + sendToSpooldex.toString().replace('__ORIGIN__', location.origin) + ')()');
+bm.addEventListener('click', e => { e.preventDefault(); toast('Drag this button to your bookmarks bar, then click it on a product page.'); });
+window.addEventListener('hashchange', importFromHash);
+
+load().then(() => { importFromHash(); if (db.auth?.loggedIn && !db.auth?.invalid) sync(); }).catch(() => {});
+</script>
+</body>
+</html>
