@@ -138,13 +138,16 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
   </section>
 
   <section>
-    <h2><span class="grow">Print history</span></h2>
-    <div class="toolbar">
-      <input id="printSearch" type="search" placeholder="Search prints" data-input="search" style="flex:1 1 200px">
+    <h2><span class="grow">Print history</span>
+      <button id="printsToggle" data-act="togglePrintsSection" aria-expanded="true" aria-controls="printsBody">Hide</button></h2>
+    <div id="printsBody">
+      <div class="toolbar">
+        <input id="printSearch" type="search" placeholder="Search prints" data-input="search" style="flex:1 1 200px">
+      </div>
+      <p id="costSummary" class="muted" style="margin:0 0 10px"></p>
+      <div class="tablewrap"><table id="prints"></table></div>
+      <div id="printsMore" style="margin-top:10px"></div>
     </div>
-    <p id="costSummary" class="muted" style="margin:0 0 10px"></p>
-    <div class="tablewrap"><table id="prints"></table></div>
-    <div id="printsMore" style="margin-top:10px"></div>
   </section>
 
   <section>
@@ -170,6 +173,7 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
       <label for="f_colorName">Color name</label><input id="f_colorName" placeholder="Black">
       <label for="f_colorHex">Color</label>
       <div class="row"><input id="f_colorPick" type="color"><input id="f_colorHex" placeholder="RRGGBB" maxlength="7"></div>
+      <span class="hint" id="f_colorHint" hidden>Guessed from the color name. It's replaced by the real color once this spool is linked to your print history.</span>
       <label for="f_price">Price paid $</label><input id="f_price" type="number" min="0" step="0.01" placeholder="18.99">
       <label for="f_start">Starting net g</label><input id="f_start" type="number" min="0" step="1">
       <span class="hint">Filament on the spool when new (usually 1000).</span>
@@ -599,6 +603,8 @@ function openSpool(spool, isNew) {
   $('f_colorName').value = spool.colorName || '';
   $('f_colorHex').value = hex6(spool.colorHex);
   $('f_colorPick').value = '#' + (hex6(spool.colorHex).length === 6 ? hex6(spool.colorHex) : 'CCCCCC');
+  $('f_colorHex').dataset.guessed = spool.colorGuessed ? '1' : '';
+  $('f_colorHint').hidden = !spool.colorGuessed;
   $('f_start').value = spool.startGrams ?? 1000;
   $('f_price').value = spool.price ?? '';
   $('f_tare').value = spool.tareGrams ?? suggestedTare(spool.url) ?? '';
@@ -665,6 +671,7 @@ function saveSpool() {
   s.material = $('f_material').value.trim();
   s.colorName = $('f_colorName').value.trim();
   s.colorHex = hex6($('f_colorHex').value);
+  s.colorGuessed = !!$('f_colorHex').dataset.guessed;
   s.startGrams = +$('f_start').value || 0;
   s.price = $('f_price').value === '' ? null : +$('f_price').value;
   s.tareGrams = $('f_tare').value === '' ? null : +$('f_tare').value;
@@ -732,9 +739,18 @@ function cycleTheme() {
   showTheme();
 }
 
+// Collapsed/expanded print history, remembered per browser.
+function setPrintsCollapsed(collapsed) {
+  $('printsBody').hidden = collapsed;
+  $('printsToggle').textContent = collapsed ? 'Show' : 'Hide';
+  $('printsToggle').setAttribute('aria-expanded', String(!collapsed));
+  try { localStorage.setItem('spooldex-prints-collapsed', collapsed ? '1' : '0'); } catch {}
+}
+
 const actions = {
   sync,
   theme: cycleTheme,
+  togglePrintsSection: () => setPrintsCollapsed(!$('printsBody').hidden),
   newSpool: () => openSpool({ startGrams: 1000, matchKeys: [] }, true),
   editSpool: d => openSpool(spoolById(d.id), false),
   saveSpool,
@@ -777,6 +793,7 @@ const changes = {
     if (!el.value) return;
     const s = spoolById(el.value);
     if (!s.matchKeys.includes(d.key)) s.matchKeys.push(d.key);
+    if (s.colorGuessed || !s.colorHex) { s.colorHex = d.key.split('|')[1]; s.colorGuessed = false; }
     save();
   },
   showEmpty: () => renderSpools(),
@@ -798,11 +815,15 @@ document.addEventListener('input', e => {
     const key = e.target.value;
     const keys = $('f_keys').value.split(',').map(k => k.trim()).filter(Boolean);
     if (!keys.includes(key)) $('f_keys').value = [...keys, key].join(', ');
-    if (!$('f_colorHex').value) { $('f_colorHex').value = key.split('|')[1]; $('f_colorPick').value = '#' + key.split('|')[1]; }
+    if (!$('f_colorHex').value || $('f_colorHex').dataset.guessed) {
+      $('f_colorHex').value = key.split('|')[1]; $('f_colorPick').value = '#' + key.split('|')[1];
+      $('f_colorHex').dataset.guessed = ''; $('f_colorHint').hidden = true;
+    }
     if (!$('f_material').value) $('f_material').value = key.split('|')[0];
     e.target.value = '';
   }
   if (e.target.id === 'f_url' && $('f_tare').value === '') $('f_tare').value = suggestedTare(e.target.value) ?? '';
+  if (e.target.id === 'f_colorPick' || e.target.id === 'f_colorHex') { $('f_colorHex').dataset.guessed = ''; $('f_colorHint').hidden = true; }
   if (e.target.id === 'f_colorPick') $('f_colorHex').value = e.target.value.slice(1).toUpperCase();
   if (e.target.id === 'f_colorHex' && hex6(e.target.value).length === 6) $('f_colorPick').value = '#' + hex6(e.target.value);
 });
@@ -845,6 +866,25 @@ function sendToSpooldex() {
   window.open(ORIGIN + '/#add=' + encodeURIComponent(JSON.stringify(data)), '_blank');
 }
 
+// Best-effort swatch from a color name using the browser's named colors: the whole name first
+// ("Forest Green" -> forestgreen), then single words from the end ("Neon Green" -> green).
+function guessHex(name) {
+  const words = String(name || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+  const tries = [words.join(''), ...words.slice().reverse()];
+  const probe = document.createElement('span');
+  document.body.appendChild(probe);
+  try {
+    for (const t of tries) {
+      probe.style.color = '';
+      probe.style.color = t;
+      if (!t || !probe.style.color) continue;
+      const rgb = getComputedStyle(probe).color.match(/\d+/g);
+      if (rgb) return rgb.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+    return '';
+  } finally { probe.remove(); }
+}
+
 // Turns what the bookmark sent into a pre-filled new spool.
 function spoolFromProduct(d) {
   const title = String(d.title || '').replace(/\s*[-|]\s*Micro Center\s*$/i, '');
@@ -852,8 +892,9 @@ function spoolFromProduct(d) {
   const parts = title.split(' - ');
   const colorName = parts.length > 1 ? parts.pop().split(/[;,]/)[0].trim() : '';
   const kg = title.match(/(\d+(?:\.\d+)?)\s*kg/i), g = title.match(/(\d{3,4})\s*g\b/i);
+  const colorHex = guessHex(colorName);
   return {
-    brand: String(d.brand || ''), material: material.toUpperCase(), colorName,
+    brand: String(d.brand || ''), material: material.toUpperCase(), colorName, colorHex, colorGuessed: !!colorHex,
     startGrams: kg ? Math.round(+kg[1] * 1000) : g ? +g[1] : 1000,
     price: d.price !== '' && !isNaN(+d.price) ? +d.price : null,
     url: safeUrl(d.url), image: safeUrl(d.image), sku: d.sku ? String(d.sku) : null, upc: d.upc ? String(d.upc) : null,
@@ -875,6 +916,7 @@ bm.href = 'javascript:' + encodeURIComponent('(' + sendToSpooldex.toString().rep
 bm.addEventListener('click', e => { e.preventDefault(); toast('Drag this button to your bookmarks bar, then click it on a product page.'); });
 window.addEventListener('hashchange', importFromHash);
 showTheme();
+try { if (localStorage.getItem('spooldex-prints-collapsed') === '1') setPrintsCollapsed(true); } catch {}
 
 load().then(() => { importFromHash(); if (db.auth?.loggedIn && !db.auth?.invalid) sync(); }).catch(() => {});
 </script>
