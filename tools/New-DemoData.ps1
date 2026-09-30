@@ -9,8 +9,8 @@ $ErrorActionPreference = 'Stop'
 $now = Get-Date
 
 $spools = @(
-    @{ id = 'demo1'; brand = 'Polymaker'; material = 'PLA';  colorName = 'Charcoal';     colorHex = '2B2B2B'; price = 19.99; key = 'PLA|2B2B2B' }
-    @{ id = 'demo2'; brand = 'Inland';    material = 'PLA+'; colorName = 'Neon Green';   colorHex = 'CCFF00'; price = 16.99; key = 'PLA|CCFF00'
+    @{ id = 'demo1'; brand = 'Polymaker'; material = 'PLA';  colorName = 'Charcoal';     colorHex = '2B2B2B'; price = 19.99; key = 'PLA|2B2B2B'; spares = 2 }
+    @{ id = 'demo2'; brand = 'Inland';    material = 'PLA+'; colorName = 'Neon Green';   colorHex = 'CCFF00'; price = 16.99; key = 'PLA|CCFF00'; spares = 1
        weighed = @{ grams = 330; at = $now.AddDays(-14).ToString('o') } }
     @{ id = 'demo3'; brand = 'eSun';      material = 'PETG'; colorName = 'Cool White';   colorHex = 'F4F4F4'; price = 18.99; key = 'PETG|F4F4F4' }
     @{ id = 'demo4'; brand = 'Inland';    material = 'Matte PLA'; colorName = 'Rainbow'; colorHex = 'D4B1DD'; price = 23.99; key = 'PLA|D4B1DD' }
@@ -22,6 +22,7 @@ $spools = @(
         startGrams = 1000; adjustGrams = 0; price = $_.price; matchKeys = @($_.key); status = 'active'
     }
     if ($_.weighed) { $s.weighed = $_.weighed }
+    if ($_.spares) { $s.spares = $_.spares }
     [pscustomobject]$s
 }
 
