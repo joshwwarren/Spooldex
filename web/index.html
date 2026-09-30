@@ -160,6 +160,8 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
   <p class="muted" style="font-size:12px">
     Grams come from Bambu Studio's slicing estimate for each print.
     Warn when a spool drops below <input id="lowGrams" type="number" min="0" step="10" style="width:70px" data-change="lowGrams"> g.
+    Cancelled prints skip the first <input id="prepMinutes" type="number" min="0" step="1" style="width:56px" data-change="prepMinutes"> min
+    (heating and calibration) when estimating filament used.
     Data is saved in <code>%USERPROFILE%\Spooldex</code>.
   </p>
 </main>
@@ -264,12 +266,16 @@ function swatchBg(hex, spool) {
 }
 const swatch = (hex, cls = '', spool = null) => `<span class="sw ${cls}" style="background:${swatchBg(hex, spool)}"></span>`;
 const spoolName = s => [s.brand, s.material, s.colorName].filter(Boolean).join(' ') || 'Unnamed spool';
-// Share of a failed/cancelled print that ran: time until it stopped / the slicer's time estimate.
+// Share of a failed/cancelled print's filament that was used. The first few minutes (heating, bed
+// leveling, calibration) extrude nothing, and Bambu's time estimate includes them, so that startup time
+// is taken off both: (time run - startup) / (estimate - startup).
+const prepSeconds = () => Math.max(0, +(db.settings?.prepMinutes ?? 6)) * 60;
 function ranFraction(p) {
   if (!p || p.status === 'finished') return 1;
   const secs = (Date.parse(p.end) - Date.parse(p.start)) / 1000;
   if (!(secs >= 0) || !(+p.estSeconds > 0)) return 1;
-  return Math.min(1, secs / +p.estSeconds);
+  const prep = Math.min(prepSeconds(), +p.estSeconds * 0.5);   // never more than half of a short print
+  return Math.max(0, Math.min(1, (secs - prep) / (+p.estSeconds - prep)));
 }
 const hasOverride = u => u.gramsOverride != null && u.gramsOverride !== '';
 const defaultGrams = (u, p) => (+u.grams || 0) * ranFraction(p);
@@ -438,6 +444,7 @@ const remainingOf = s => s.weighed
 function render() {
   calc = compute();
   $('lowGrams').value = lowGrams();
+  $('prepMinutes').value = prepSeconds() / 60;
   renderHeader(); renderBanners(); renderSlots(); renderAttention(); renderSpools(); renderPrints();
 }
 
@@ -828,6 +835,7 @@ const changes = {
   },
   showEmpty: () => renderSpools(),
   lowGrams: (d, el) => { db.settings.lowGrams = Math.max(0, +el.value || 0); save(); },
+  prepMinutes: (d, el) => { db.settings.prepMinutes = Math.max(0, +el.value || 0); save(); },
 };
 
 document.addEventListener('click', e => {

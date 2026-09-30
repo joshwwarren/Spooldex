@@ -62,8 +62,10 @@ spool was printed under two slot colors.
 The AMS lite panel shows whatever the most recent print through each slot used, or a spool you picked
 from the slot's menu if that is newer.
 
-Failed or cancelled prints are estimated from how long they ran against the slicer's time estimate
-(cancelled 30 min into a 2 h print counts ~25% of the planned grams) and flagged so you can keep the
+Failed or cancelled prints are estimated from how long they ran against the slicer's time estimate,
+minus the startup time (heating and calibration, 6 min by default, adjustable at the bottom of the page)
+that extrudes nothing: cancelled 36 min into a 2 h print counts ~25% of the planned grams, and a print
+cancelled during calibration counts nothing. They're flagged so you can keep the
 estimate, count the full amount, enter weighed grams, or not count it. Any print's filament can be
 reassigned or its grams edited by clicking it in the history.
 
