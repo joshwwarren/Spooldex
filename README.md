@@ -70,7 +70,9 @@ estimate, count the full amount, enter weighed grams, or not count it. Any print
 reassigned or its grams edited by clicking it in the history.
 
 When a spool runs out, set its status to **Used up** and add the new one with an **Opened on** date, even if
-it's the same color.
+it's the same color. If you keep sealed backups, set **Unopened spares** on the spool: the list shows
+"+2 spares", their value counts toward filament on hand, and marking the spool used up offers to open a
+spare as a fresh spool (same details, dated today) that takes over its slot.
 
 ## Adding spools from store pages
 

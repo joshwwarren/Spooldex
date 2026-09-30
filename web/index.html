@@ -83,6 +83,7 @@ tr.dim td { color: var(--muted); }
 .badge.finished { background: var(--ok-bg); color: var(--ok); }
 .badge.failed, .badge.unknown { background: var(--bad-bg); color: var(--bad); }
 .badge.low { background: var(--warn-bg); color: var(--warn); }
+.badge.spare { background: var(--ok-bg); color: var(--ok); }
 
 .item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .item:last-child { border-bottom: none; }
@@ -190,6 +191,8 @@ dialog h3 { margin: 0 0 14px; font-size: 16px; }
       <span class="hint">Prints before this date aren't charged to it. Leave blank for older spools.</span>
       <label for="f_status">Status</label>
       <select id="f_status"><option value="active">In use / on shelf</option><option value="empty">Used up</option></select>
+      <label for="f_spares">Unopened spares</label><input id="f_spares" type="number" min="0" step="1" placeholder="0">
+      <span class="hint">Extra sealed spools of this same filament. When this one is used up, you can open a spare with one click.</span>
       <label for="f_link">Printed as</label><select id="f_link"></select>
       <span class="hint">If you've already printed with this spool, pick the filament from your history to link those prints.</span>
       <label for="f_keys">Matches</label><input id="f_keys" placeholder="e.g. PLA|FF0000">
@@ -266,6 +269,8 @@ function swatchBg(hex, spool) {
 }
 const swatch = (hex, cls = '', spool = null) => `<span class="sw ${cls}" style="background:${swatchBg(hex, spool)}"></span>`;
 const spoolName = s => [s.brand, s.material, s.colorName].filter(Boolean).join(' ') || 'Unnamed spool';
+const spares = s => Math.max(0, Math.floor(+(s && s.spares) || 0));
+const sparesLabel = s => `${spares(s)} spare${spares(s) === 1 ? '' : 's'}`;
 // Share of a failed/cancelled print's filament that was used. The first few minutes (heating, bed
 // leveling, calibration) extrude nothing, and Bambu's time estimate includes them, so that startup time
 // is taken off both: (time run - startup) / (estimate - startup).
@@ -359,6 +364,9 @@ function resolve(print, u) {
   const k = keyOf(u.type, u.color);
   const c = db.spools.filter(s => s.matchKeys.includes(k) && inRange(s, print.start || print.end));
   if (c.length === 1) return { state: 'auto', spool: c[0] };
+  // A spool used up and its replacement opened the same day both cover that day: the one in use wins.
+  const active = c.filter(s => s.status !== 'empty');
+  if (active.length === 1) return { state: 'auto', spool: active[0] };
   if (c.length > 1) return { state: 'ambiguous', candidates: c };
   return { state: 'unmatched' };
 }
@@ -504,7 +512,7 @@ function renderSlots() {
       <div class="top">${swatch(s.colorHex, 'big', s)}<div><div class="name">${esc(spoolName(s))}</div>
         <div class="grams">${fmtG(rem)} <span class="muted" style="font-size:13px;font-weight:400">left</span></div></div></div>
       <div class="bar"><div style="width:${pct.toFixed(1)}%"></div></div>
-      <div class="muted" style="font-size:12px">${seen}</div>
+      <div class="muted" style="font-size:12px">${seen}${spares(s) ? ` · ${sparesLabel(s)} on the shelf` : ''}</div>
       ${select}</div>`;
   }
   $('slots').innerHTML = h;
@@ -557,7 +565,7 @@ function renderSpools() {
     list.map(s => {
       const st = calc.stats.get(s.id); const rem = remainingOf(s); const low = s.status !== 'empty' && rem < lowGrams();
       return `<tr class="${s.status === 'empty' ? 'dim' : ''}"><td>${swatch(s.colorHex, '', s)}</td>
-        <td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Open product page">${esc(spoolName(s))} ↗</a>` : esc(spoolName(s))}${s.status === 'empty' ? ' <span class="muted">(used up)</span>' : ''}</td>
+        <td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Open product page">${esc(spoolName(s))} ↗</a>` : esc(spoolName(s))}${s.status === 'empty' ? ' <span class="muted">(used up)</span>' : ''}${spares(s) ? ` <span class="badge spare">+${sparesLabel(s)}</span>` : ''}</td>
         <td>${calc.spoolSlot.get(s.id) || ''}</td>
         <td class="num">${costPerGram(s) != null ? `<span title="${fmt$(costPerGram(s) * 1000)}/kg">${fmt$(+s.price)}</span>` : '<span class="muted">—</span>'}</td>
         <td class="num">${fmtG(+s.startGrams || 0)}</td><td class="num">${fmtG(st.used)}</td>
@@ -590,8 +598,8 @@ function renderCostSummary() {
     if ((p.start || '') >= cutoff) month += c.total;
     if (!top || c.total > top.cost) top = { p, cost: c.total };
   }
-  const onHand = db.spools.filter(s => s.status !== 'empty' && costPerGram(s) != null)
-    .reduce((t, s) => t + Math.max(0, remainingOf(s)) * costPerGram(s), 0);
+  const onHand = db.spools.filter(s => costPerGram(s) != null)
+    .reduce((t, s) => t + (s.status !== 'empty' ? Math.max(0, remainingOf(s)) * costPerGram(s) : 0) + spares(s) * +s.price, 0);
   if (!all && !onHand) {
     $('costSummary').innerHTML = 'Add the price you paid to each spool (Edit) to see what your prints cost.';
     return;
@@ -642,6 +650,7 @@ function openSpool(spool, isNew) {
   $('f_url').value = spool.url || '';
   $('f_added').value = spool.addedDate || '';
   $('f_status').value = spool.status || 'active';
+  $('f_spares').value = spares(spool) || '';
   $('f_keys').value = (spool.matchKeys || []).join(', ');
   editingExtras = isNew ? { image: spool.image || null, sku: spool.sku || null, upc: spool.upc || null } : null;
   $('f_link').innerHTML = '<option value="">—</option>' + calc.unknown.map(u =>
@@ -726,7 +735,23 @@ function saveSpool() {
   if (s.status !== 'empty') s.emptiedDate = null;
   s.matchKeys = $('f_keys').value.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
   s.notes = $('f_notes').value.trim();
+  s.spares = spares({ spares: $('f_spares').value });
   if (isNew) db.spools.push(s);
+
+  // Used up with spares on the shelf: open one as a fresh spool that takes over the same slot.
+  if (s.status === 'empty' && !wasEmpty && spares(s) && confirm(`Open one of the ${sparesLabel(s)} as a new spool? It starts full, dated today.`)) {
+    const fresh = {
+      id: uid(), brand: s.brand, material: s.material, colorName: s.colorName, colorHex: s.colorHex,
+      colorStyle: s.colorStyle, colorGuessed: s.colorGuessed, startGrams: s.startGrams, adjustGrams: 0,
+      price: s.price, tareGrams: s.tareGrams, url: s.url, image: s.image || null, sku: s.sku || null, upc: s.upc || null,
+      matchKeys: [...s.matchKeys], status: 'active', addedDate: new Date().toISOString().slice(0, 10),
+      spares: spares(s) - 1, notes: '',
+    };
+    db.spools.push(fresh);
+    const slot = calc.spoolSlot.get(s.id);
+    if (slot) db.slotOverrides[slot] = { spoolId: fresh.id, at: new Date().toISOString() };
+    s.spares = 0;
+  }
 
   // A typed remaining amount becomes a weighed checkpoint as of now.
   const remField = $('f_remaining');
